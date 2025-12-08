@@ -53,18 +53,18 @@ const (
 
 // KeyConfig holds configuration for cryptographic keys
 type KeyConfig struct {
-	// Key data - could be file path, PEM bytes, or raw key bytes
-	PrivateKeyData []byte
-	PublicKeyData  []byte
-	HMACKey        []byte // For symmetric algorithms
+	// For HMAC (symmetric)
+	HMACKey       []byte
+	HMACKeyPath   string
+	HMACKeySource KeySource
 
-	// Key source type
+	// For RSA/ECDSA (asymmetric)
+	PrivateKeyData   []byte
+	PublicKeyData    []byte
+	PrivateKeyPath   string
+	PublicKeyPath    string
 	PrivateKeySource KeySource
 	PublicKeySource  KeySource
-
-	// For file paths (only used if KeySource is KeySourceFile)
-	PrivateKeyPath string
-	PublicKeyPath  string
 
 	// Algorithm configuration
 	SigningMethod SigningMethod

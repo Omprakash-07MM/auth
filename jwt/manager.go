@@ -1,7 +1,6 @@
 package jwt
 
 import (
-	"encoding/pem"
 	"fmt"
 	"os"
 	"time"
@@ -32,8 +31,22 @@ func NewJWTManager(config *Config) (*JWTManager, error) {
 
 // NewJWTIssuer creates a JWT manager that can issue tokens (Auth Service)
 func NewJWTIssuer(config *Config) (*JWTManager, error) {
-	// Resolve keys from config
-	signingKey, verifyingKey, signingMethod, err := resolveKeys(config, true)
+	if config == nil {
+		return nil, fmt.Errorf("config cannot be nil")
+	}
+
+	if config.KeyConfig == nil {
+		return nil, fmt.Errorf("key config cannot be nil")
+	}
+
+	// Get signing method from algorithm
+	signingMethod, err := getSigningMethod(config)
+	if err != nil {
+		return nil, err
+	}
+
+	// Resolve keys based on algorithm type
+	signingKey, verifyingKey, err := resolveKeys(config.KeyConfig, signingMethod, config.Mode == ModeIssuer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve keys: %w", err)
 	}
@@ -62,9 +75,25 @@ func NewJWTIssuer(config *Config) (*JWTManager, error) {
 
 func NewJWTValidator(config *Config) (*JWTManager, error) {
 	// For validator, we only need verifying key
-	_, verifyingKey, signingMethod, err := resolveKeys(config, false)
+
+	if config == nil {
+		return nil, fmt.Errorf("config cannot be nil")
+	}
+
+	if config.KeyConfig == nil {
+		return nil, fmt.Errorf("key config cannot be nil")
+	}
+
+	// Get signing method from algorithm
+	signingMethod, err := getSigningMethod(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve verifying key: %w", err)
+		return nil, err
+	}
+
+	// Resolve keys based on algorithm type
+	_, verifyingKey, err := resolveKeys(config.KeyConfig, signingMethod, config.Mode == ModeIssuer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve keys: %w", err)
 	}
 
 	return &JWTManager{
@@ -95,7 +124,6 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*CustomClaims, error) {
 	return nil, ErrInvalidToken
 }
 
-// ParseToken parses a JWT token without validating custom claims
 // ParseToken parses a JWT token without validating custom claims
 func (jm *JWTManager) ParseToken(tokenString string) (*jwt.Token, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &CustomClaims{}, jm.keyFunc)
@@ -128,20 +156,15 @@ func (jm *JWTManager) GetRefreshExpiry() time.Duration {
 	return jm.refreshExpiry
 }
 
-// resolveKeys handles key loading from various sources
-func resolveKeys(config *Config, needSigningKey bool) (signingKey, verifyingKey interface{}, method jwt.SigningMethod, err error) {
-	// Determine algorithm and method
-	method, err = getSigningMethod(config)
-	if err != nil {
-		return nil, nil, nil, err
+// resolveKeys resolves keys based on algorithm type
+func resolveKeys(keyConfig *KeyConfig, method jwt.SigningMethod, needSigningKey bool) (signingKey, verifyingKey interface{}, err error) {
+	// Determine algorithm type and route to appropriate resolver
+	switch method.(type) {
+	case *jwt.SigningMethodHMAC:
+		return resolveHMACKey(keyConfig)
+	default:
+		return resolveAsymmetricKey(keyConfig, method, needSigningKey)
 	}
-
-	// Use KeyConfig if provided
-	if config.KeyConfig != nil {
-		return resolveKeyConfig(config.KeyConfig, method, needSigningKey)
-	}
-
-	return nil, nil, nil, fmt.Errorf("no key configuration provided")
 }
 
 // getSigningMethod determines the JWT signing method from config
@@ -182,38 +205,66 @@ func getSigningMethod(config *Config) (jwt.SigningMethod, error) {
 	}
 }
 
-// resolveKeyConfig handles keys from KeyConfig structure
-func resolveKeyConfig(keyConfig *KeyConfig, method jwt.SigningMethod, needSigningKey bool) (signingKey, verifyingKey interface{}, _ jwt.SigningMethod, err error) {
-	// Load private key if needed
-	if needSigningKey {
-		signingKey, err = loadKey(keyConfig.PrivateKeySource, keyConfig.PrivateKeyPath, keyConfig.PrivateKeyData, true, method)
+// resolveHMACKey resolves HMAC key (symmetric)
+func resolveHMACKey(keyConfig *KeyConfig) (signingKey, verifyingKey interface{}, err error) {
+	var hmacKey []byte
+
+	// Priority 1: Direct HMAC key
+	if len(keyConfig.HMACKey) > 0 {
+		hmacKey = keyConfig.HMACKey
+	} else if keyConfig.HMACKeySource == KeySourceFile && keyConfig.HMACKeyPath != "" {
+		data, err := os.ReadFile(keyConfig.HMACKeyPath)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to load signing key: %w", err)
+			return nil, nil, fmt.Errorf("failed to read HMAC key file: %w", err)
 		}
+		hmacKey = data
+	} else if len(keyConfig.PrivateKeyData) > 0 {
+		hmacKey = keyConfig.PrivateKeyData
+	} else if len(keyConfig.PublicKeyData) > 0 {
+		hmacKey = keyConfig.PublicKeyData
 	}
 
-	// Load verifying key
-	verifyingKey, err = loadKey(keyConfig.PublicKeySource, keyConfig.PublicKeyPath, keyConfig.PublicKeyData, false, method)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to load verifying key: %w", err)
+	if len(hmacKey) == 0 {
+		return nil, nil, fmt.Errorf("HMAC key not provided. Please provide HMACKey or HMACKeyPath")
 	}
 
-	// For HMAC, use HMAC key if provided
-	if _, ok := method.(*jwt.SigningMethodHMAC); ok {
-		if len(keyConfig.HMACKey) > 0 {
-			return keyConfig.HMACKey, keyConfig.HMACKey, method, nil
-		}
-		// If HMAC but no HMAC key, try to use private key data
-		if keyConfig.PrivateKeyData != nil {
-			return keyConfig.PrivateKeyData, keyConfig.PrivateKeyData, method, nil
-		}
-	}
-
-	return signingKey, verifyingKey, method, nil
+	// For HMAC, same key is used for signing and verification
+	return hmacKey, hmacKey, nil
 }
 
-// loadKey loads a key from various sources
-func loadKey(source KeySource, path string, data []byte, isPrivate bool, method jwt.SigningMethod) (interface{}, error) {
+func resolveAsymmetricKey(keyConfig *KeyConfig, method jwt.SigningMethod, needSigningKey bool) (signingKey, verifyingKey interface{}, err error) {
+	var signKey interface{}
+
+	// Load private key if needed (for issuer mode)
+	if needSigningKey {
+		signKey, err = loadAsymmetricKey(
+			keyConfig.PrivateKeySource,
+			keyConfig.PrivateKeyPath,
+			keyConfig.PrivateKeyData,
+			true,
+			method,
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to load private key: %w", err)
+		}
+	}
+
+	// Load public key (always needed for verification)
+	verifyKey, err := loadAsymmetricKey(
+		keyConfig.PublicKeySource,
+		keyConfig.PublicKeyPath,
+		keyConfig.PublicKeyData,
+		false,
+		method,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load public key: %w", err)
+	}
+
+	return signKey, verifyKey, nil
+}
+
+func loadAsymmetricKey(source KeySource, path string, data []byte, isPrivate bool, method jwt.SigningMethod) (interface{}, error) {
 	var keyData []byte
 
 	switch source {
@@ -227,20 +278,26 @@ func loadKey(source KeySource, path string, data []byte, isPrivate bool, method 
 			return nil, fmt.Errorf("failed to read key file %s: %w", path, err)
 		}
 	case KeySourcePEM:
-		// Extract PEM data from byte array
-		block, _ := pem.Decode(data)
-		if block == nil {
-			return nil, fmt.Errorf("failed to decode PEM data")
-		}
-		keyData = block.Bytes
+		// Already PEM formatted
+		keyData = data
 	case KeySourceRaw:
+		// Convert raw key to PEM if needed
 		keyData = data
 	default:
-		return nil, fmt.Errorf("unsupported key source: %v", source)
+		// If source is not specified but data exists, assume it's PEM
+		if len(data) > 0 {
+			keyData = data
+		} else {
+			return nil, fmt.Errorf("no key data provided")
+		}
 	}
 
-	// Parse key based on algorithm type
-	switch method.(type) {
+	if len(keyData) == 0 {
+		return nil, fmt.Errorf("no key data available")
+	}
+
+	// Parse based on algorithm type
+	switch m := method.(type) {
 	case *jwt.SigningMethodRSA:
 		if isPrivate {
 			return jwt.ParseRSAPrivateKeyFromPEM(keyData)
@@ -253,9 +310,7 @@ func loadKey(source KeySource, path string, data []byte, isPrivate bool, method 
 		} else {
 			return jwt.ParseECPublicKeyFromPEM(keyData)
 		}
-	case *jwt.SigningMethodHMAC:
-		return keyData, nil
 	default:
-		return nil, fmt.Errorf("unsupported signing method for key loading")
+		return nil, fmt.Errorf("unsupported signing method: %v", m.Alg())
 	}
 }
