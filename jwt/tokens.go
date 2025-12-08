@@ -42,7 +42,7 @@ func (jm *JWTManager) GenerateAccessToken(userID string) (string, time.Time, err
 	}
 
 	token := jwt.NewWithClaims(jm.signingMethod, claims)
-	tokenString, err := token.SignedString(jm.privateKey)
+	tokenString, err := token.SignedString(jm.signingKey)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("%w: %v", ErrTokenGeneration, err)
 	}
@@ -70,7 +70,7 @@ func (jm *JWTManager) GenerateRefreshToken(userID string) (string, time.Time, er
 	}
 
 	token := jwt.NewWithClaims(jm.signingMethod, claims)
-	tokenString, err := token.SignedString(jm.privateKey)
+	tokenString, err := token.SignedString(jm.signingKey)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("%w: %v", ErrTokenGeneration, err)
 	}

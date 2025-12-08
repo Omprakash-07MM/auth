@@ -4,16 +4,6 @@ import (
 	"time"
 )
 
-// Config holds JWT configuration
-type Config struct {
-	Mode          SecurityMode  // Required: issuer, validator, or both
-	PrivateKeyPEM []byte        // Private key content (PEM encoded) - only for issuer/both
-	PublicKeyPEM  []byte        // Public key content (PEM encoded) - always required
-	AccessExpiry  time.Duration // Access token expiry
-	RefreshExpiry time.Duration // Refresh token expiry
-	Issuer        string        // Token issuer name
-}
-
 // TokenPair represents access and refresh tokens
 type TokenPair struct {
 	AccessToken  string    `json:"access_token"`
@@ -30,9 +20,65 @@ const (
 	RefreshToken TokenType = "refresh"
 )
 
-type SecurityMode string
+type SecurityMode int
 
 const (
-	ModeIssuer    SecurityMode = "issuer"    // Auth Service: Generate tokens only
-	ModeValidator SecurityMode = "validator" // Other Services: Validate tokens only
+	ModeIssuer    SecurityMode = 0
+	ModeValidator SecurityMode = 1
 )
+
+// SigningMethod defines the supported signing algorithms
+type SigningMethod string
+
+const (
+	RS256 SigningMethod = "RS256"
+	RS384 SigningMethod = "RS384"
+	RS512 SigningMethod = "RS512"
+	HS256 SigningMethod = "HS256"
+	HS384 SigningMethod = "HS384"
+	HS512 SigningMethod = "HS512"
+	ES256 SigningMethod = "ES256"
+	ES384 SigningMethod = "ES384"
+	ES512 SigningMethod = "ES512"
+)
+
+// KeySource defines where the key is loaded from
+type KeySource int
+
+const (
+	KeySourceRaw KeySource = iota
+	KeySourceFile
+	KeySourcePEM
+)
+
+// KeyConfig holds configuration for cryptographic keys
+type KeyConfig struct {
+	// Key data - could be file path, PEM bytes, or raw key bytes
+	PrivateKeyData []byte
+	PublicKeyData  []byte
+	HMACKey        []byte // For symmetric algorithms
+
+	// Key source type
+	PrivateKeySource KeySource
+	PublicKeySource  KeySource
+
+	// For file paths (only used if KeySource is KeySourceFile)
+	PrivateKeyPath string
+	PublicKeyPath  string
+
+	// Algorithm configuration
+	SigningMethod SigningMethod
+}
+
+// Config holds JWT manager configuration
+type Config struct {
+	Mode          SecurityMode
+	Issuer        string
+	AccessExpiry  time.Duration
+	RefreshExpiry time.Duration
+
+	// Key configurations
+	KeyConfig *KeyConfig
+
+	Algorithm string
+}
