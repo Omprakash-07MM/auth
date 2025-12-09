@@ -3,6 +3,7 @@ package jwt
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,6 +14,7 @@ type TokenIssuer interface {
 	GenerateAccessToken(userID string) (string, time.Time, error)
 	GenerateRefreshToken(userID string) (string, time.Time, error)
 	GenerateTokenPair(userID string) (*TokenPair, error)
+	RefreshToken(refreshToken string) (*TokenPair, error)
 }
 
 // TokenManager handles token operations
@@ -102,4 +104,20 @@ func (jm *JWTManager) GenerateTokenPair(userID string) (*TokenPair, error) {
 func (jm *JWTManager) GetTokenHash(token string) string {
 	hash := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(hash[:])
+}
+
+func (j *JWTManager) RefreshToken(refreshToken string) (*TokenPair, error) {
+	// Parse and validate the refresh token
+	claims, err := j.ValidateToken(refreshToken)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure it's a refresh token
+	if claims.TokenType != RefreshToken {
+		return nil, errors.New("invalid token type for refresh")
+	}
+
+	// Generate new token pair
+	return j.GenerateTokenPair(claims.UserID)
 }

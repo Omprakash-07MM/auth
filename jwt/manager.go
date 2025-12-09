@@ -118,6 +118,10 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*CustomClaims, error) {
 		if err := claims.Validate(); err != nil {
 			return nil, err
 		}
+
+		if claims.Issuer != jm.issuer {
+			return nil, ErrInvalidIssuer
+		}
 		return claims, nil
 	}
 

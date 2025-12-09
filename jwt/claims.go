@@ -14,6 +14,7 @@ type CustomClaims struct {
 
 // Validate validates the claims
 func (c *CustomClaims) Validate() error {
+
 	if c.UserID == "" {
 		return ErrInvalidUserID
 	}

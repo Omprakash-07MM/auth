@@ -11,4 +11,5 @@ var (
 	ErrInvalidUserID        = errors.New("invalid user ID")
 	ErrInvalidTokenType     = errors.New("invalid token type")
 	ErrKeyNotFound          = errors.New("key not found")
+	ErrInvalidIssuer        = errors.New("invalid token issuer")
 )
