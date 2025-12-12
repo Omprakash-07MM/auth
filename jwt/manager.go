@@ -3,6 +3,7 @@ package jwt
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -283,7 +284,9 @@ func loadAsymmetricKey(source KeySource, path string, data []byte, isPrivate boo
 		}
 	case KeySourcePEM:
 		// Already PEM formatted
-		keyData = data
+		keyStr := string(data)
+		keyStr = strings.ReplaceAll(keyStr, "\\n", "\n")
+		keyData = []byte(keyStr)
 	case KeySourceRaw:
 		// Convert raw key to PEM if needed
 		keyData = data
