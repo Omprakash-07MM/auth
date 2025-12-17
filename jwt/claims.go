@@ -7,8 +7,9 @@ import (
 
 // CustomClaims contains custom JWT claims
 type CustomClaims struct {
-	UserID    string    `json:"user_id"`
-	TokenType TokenType `json:"token_type"`
+	UserID       string    `json:"user_id"`
+	TokenType    TokenType `json:"token_type"`
+	TokenVersion int64     `json:"token_version,omitempty"`
 	jwt.RegisteredClaims
 }
 

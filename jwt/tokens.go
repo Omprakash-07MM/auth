@@ -28,6 +28,20 @@ type TokenValidator interface {
 func (jm *JWTManager) GenerateAccessToken(userID string) (string, time.Time, error) {
 	expirationTime := time.Now().Add(jm.accessExpiry)
 
+	var tv int64 = 0
+	var err error
+
+	if jm.redisClient != nil {
+		key := "tv:" + userID
+
+		tv, err = jm.redisClient.Incr(jm.ctx, key).Result()
+		if err != nil {
+			return "", time.Time{}, err
+		}
+
+		jm.redisClient.Expire(jm.ctx, key, jm.accessExpiry+time.Minute*2)
+	}
+
 	claims := &CustomClaims{
 		UserID:    userID,
 		TokenType: AccessToken,
@@ -37,6 +51,10 @@ func (jm *JWTManager) GenerateAccessToken(userID string) (string, time.Time, err
 			Issuer:    jm.issuer,
 			Subject:   userID,
 		},
+	}
+
+	if tv > 0 {
+		claims.TokenVersion = tv
 	}
 
 	if err := claims.Validate(); err != nil {
@@ -52,9 +70,23 @@ func (jm *JWTManager) GenerateAccessToken(userID string) (string, time.Time, err
 	return tokenString, expirationTime, nil
 }
 
-// GenerateRefreshToken creates a new refresh token
+// GenerateRefreshToken creates a new refresh
 func (jm *JWTManager) GenerateRefreshToken(userID string) (string, time.Time, error) {
 	expirationTime := time.Now().Add(jm.refreshExpiry)
+
+	var rv int64 = 0
+	var err error
+
+	if jm.redisClient != nil {
+		key := "rv:" + userID
+
+		rv, err = jm.redisClient.Incr(jm.ctx, key).Result()
+		if err != nil {
+			return "", time.Time{}, err
+		}
+
+		jm.redisClient.Expire(jm.ctx, key, jm.refreshExpiry+time.Minute*2)
+	}
 
 	claims := &CustomClaims{
 		UserID:    userID,
@@ -65,6 +97,10 @@ func (jm *JWTManager) GenerateRefreshToken(userID string) (string, time.Time, er
 			Issuer:    jm.issuer,
 			Subject:   userID,
 		},
+	}
+
+	if rv > 0 {
+		claims.TokenVersion = rv
 	}
 
 	if err := claims.Validate(); err != nil {
@@ -82,6 +118,19 @@ func (jm *JWTManager) GenerateRefreshToken(userID string) (string, time.Time, er
 
 // GenerateTokenPair generates both access and refresh tokens
 func (jm *JWTManager) GenerateTokenPair(userID string) (*TokenPair, error) {
+
+	if jm.redisClient != nil {
+		accessKey := "tv:" + userID
+		refreshKey := "rv:" + userID
+		refreshCount, _ := jm.redisClient.Get(jm.ctx, refreshKey).Int64()
+
+		if refreshCount > 500 {
+			jm.redisClient.Del(jm.ctx, accessKey)
+			jm.redisClient.Del(jm.ctx, refreshKey)
+		}
+
+	}
+
 	accessToken, accessExpiry, err := jm.GenerateAccessToken(userID)
 	if err != nil {
 		return nil, err

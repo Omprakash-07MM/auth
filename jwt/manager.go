@@ -1,12 +1,15 @@
 package jwt
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/redis/go-redis/v9"
 )
 
 // JWTManager manages JWT operations
@@ -18,20 +21,22 @@ type JWTManager struct {
 	accessExpiry  time.Duration
 	refreshExpiry time.Duration
 	issuer        string
+	redisClient   *redis.Client
+	ctx           context.Context
 }
 
 // NewJWTManager creates a new JWT manager with RSA keys
 
-func NewJWTManager(config *Config) (*JWTManager, error) {
+func NewJWTManager(config *Config, redisCli *redis.Client) (*JWTManager, error) {
 	if config.Mode == ModeIssuer {
-		return NewJWTIssuer(config)
+		return NewJWTIssuer(config, redisCli)
 	} else {
-		return NewJWTValidator(config)
+		return NewJWTValidator(config, redisCli)
 	}
 }
 
 // NewJWTIssuer creates a JWT manager that can issue tokens (Auth Service)
-func NewJWTIssuer(config *Config) (*JWTManager, error) {
+func NewJWTIssuer(config *Config, redisCli *redis.Client) (*JWTManager, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
@@ -74,7 +79,7 @@ func NewJWTIssuer(config *Config) (*JWTManager, error) {
 	}, nil
 }
 
-func NewJWTValidator(config *Config) (*JWTManager, error) {
+func NewJWTValidator(config *Config, redisCli *redis.Client) (*JWTManager, error) {
 	// For validator, we only need verifying key
 
 	if config == nil {
@@ -105,6 +110,7 @@ func NewJWTValidator(config *Config) (*JWTManager, error) {
 		accessExpiry:  config.AccessExpiry,
 		refreshExpiry: config.RefreshExpiry,
 		issuer:        config.Issuer,
+		redisClient:   redisCli,
 	}, nil
 }
 
@@ -123,6 +129,21 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*CustomClaims, error) {
 		if claims.Issuer != jm.issuer {
 			return nil, ErrInvalidIssuer
 		}
+		key := "tv" + claims.UserID
+
+		currentTV, err := jm.redisClient.Get(jm.ctx, key).Int64()
+		if err != nil {
+			if err == redis.Nil {
+				return nil, errors.New("invalid token: no session found")
+			}
+
+			return nil, err
+		}
+
+		if claims.TokenVersion != currentTV {
+			return nil, errors.New("invalid token: token revoked")
+		}
+
 		return claims, nil
 	}
 
