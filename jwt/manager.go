@@ -129,7 +129,7 @@ func (jm *JWTManager) ValidateToken(ctx context.Context, tokenString string) (*C
 		if claims.Issuer != jm.issuer {
 			return nil, ErrInvalidIssuer
 		}
-		key := "tv" + claims.UserID
+		key := "tv:" + claims.UserID
 
 		currentTV, err := jm.redisClient.Get(ctx, key).Int64()
 		if err != nil {
