@@ -21,27 +21,45 @@ type JWTManager struct {
 	accessExpiry  time.Duration
 	refreshExpiry time.Duration
 	issuer        string
-	redisClient   *redis.Client
+
+	//if tokenStore is nil, token versioning is disabled
+	//only used for the maintenance of token versions for revocation
+	tokenStore *RedisTokenStore
+}
+
+type RedisTokenStore struct {
+	client        *redis.Client
+	accessPrefix  string
+	refreshPrefix string
 }
 
 // NewJWTManager creates a new JWT manager with RSA keys
 
-func NewJWTManager(config *Config, redisCli *redis.Client) (*JWTManager, error) {
+func NewJWTManager(config *Config, store *RedisTokenStore) (*JWTManager, error) {
 	if config.Mode == ModeIssuer {
-		return NewJWTIssuer(config, redisCli)
+		return NewJWTIssuer(config, store)
 	} else {
-		return NewJWTValidator(config, redisCli)
+		return NewJWTValidator(config, store)
 	}
 }
 
 // NewJWTIssuer creates a JWT manager that can issue tokens (Auth Service)
-func NewJWTIssuer(config *Config, redisCli *redis.Client) (*JWTManager, error) {
+func NewJWTIssuer(config *Config, store *RedisTokenStore) (*JWTManager, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
 
 	if config.KeyConfig == nil {
 		return nil, fmt.Errorf("key config cannot be nil")
+	}
+
+	if store != nil && store.client != nil {
+		if store.accessPrefix == "" {
+			store.accessPrefix = "AT:"
+		}
+		if store.refreshPrefix == "" {
+			store.refreshPrefix = "RT:"
+		}
 	}
 
 	// Get signing method from algorithm
@@ -75,11 +93,11 @@ func NewJWTIssuer(config *Config, redisCli *redis.Client) (*JWTManager, error) {
 		accessExpiry:  accessExpiry,
 		refreshExpiry: refreshExpiry,
 		issuer:        config.Issuer,
-		redisClient:   redisCli,
+		tokenStore:    store,
 	}, nil
 }
 
-func NewJWTValidator(config *Config, redisCli *redis.Client) (*JWTManager, error) {
+func NewJWTValidator(config *Config, store *RedisTokenStore) (*JWTManager, error) {
 	// For validator, we only need verifying key
 
 	if config == nil {
@@ -88,6 +106,15 @@ func NewJWTValidator(config *Config, redisCli *redis.Client) (*JWTManager, error
 
 	if config.KeyConfig == nil {
 		return nil, fmt.Errorf("key config cannot be nil")
+	}
+
+	if store != nil && store.client != nil {
+		if store.accessPrefix == "" {
+			store.accessPrefix = "AT:"
+		}
+		if store.refreshPrefix == "" {
+			store.refreshPrefix = "RT:"
+		}
 	}
 
 	// Get signing method from algorithm
@@ -110,12 +137,12 @@ func NewJWTValidator(config *Config, redisCli *redis.Client) (*JWTManager, error
 		accessExpiry:  config.AccessExpiry,
 		refreshExpiry: config.RefreshExpiry,
 		issuer:        config.Issuer,
-		redisClient:   redisCli,
+		tokenStore:    store,
 	}, nil
 }
 
 // ValidateToken validates and parses a JWT token
-func (jm *JWTManager) ValidateToken(ctx context.Context, tokenString string) (*CustomClaims, error) {
+func (jm *JWTManager) ValidateToken(ctx context.Context, tokenString string, tokenType TokenType) (*CustomClaims, error) {
 	token, err := jm.ParseToken(tokenString)
 	if err != nil {
 		return nil, err
@@ -129,19 +156,16 @@ func (jm *JWTManager) ValidateToken(ctx context.Context, tokenString string) (*C
 		if claims.Issuer != jm.issuer {
 			return nil, ErrInvalidIssuer
 		}
-		key := "tv:" + claims.UserID
 
-		currentTV, err := jm.redisClient.Get(ctx, key).Int64()
-		if err != nil {
-			if err == redis.Nil {
-				return nil, errors.New("invalid token: no session found")
+		if jm.tokenStore != nil && jm.tokenStore.client != nil {
+			err := jm.tokenStore.ValidateTokenVersion(ctx, tokenType, claims)
+			if err != nil {
+				return nil, err
 			}
-
-			return nil, err
 		}
 
-		if claims.TokenVersion != currentTV {
-			return nil, errors.New("invalid token: token revoked")
+		if claims.TokenType != tokenType {
+			return nil, ErrInvalidTokenType
 		}
 
 		return claims, nil
@@ -341,4 +365,54 @@ func loadAsymmetricKey(source KeySource, path string, data []byte, isPrivate boo
 	default:
 		return nil, fmt.Errorf("unsupported signing method: %v", m.Alg())
 	}
+}
+
+func (ts *RedisTokenStore) ValidateTokenVersion(ctx context.Context, tokenType TokenType, claims *CustomClaims) error {
+
+	prefix := ""
+	switch tokenType {
+	case AccessToken:
+		prefix = ts.accessPrefix
+	case RefreshToken:
+		prefix = ts.refreshPrefix
+	}
+
+	key := prefix + claims.UserID
+
+	currentVer, err := ts.client.Get(ctx, key).Int64()
+	if err != nil {
+		if err == redis.Nil {
+			return errors.New("invalid  token: no session found")
+		}
+
+		return err
+	}
+
+	if claims.TokenVersion != currentVer {
+		return errors.New("invalid  token: token revoked")
+	}
+
+	return nil
+}
+
+func (ts *RedisTokenStore) StoreTokenVersion(ctx context.Context, tokenType TokenType, userId string, expireTime time.Duration) (int64, error) {
+
+	prefix := ""
+	switch tokenType {
+	case AccessToken:
+		prefix = ts.accessPrefix
+	case RefreshToken:
+		prefix = ts.refreshPrefix
+	}
+
+	key := prefix + userId
+
+	tv, err := ts.client.Incr(ctx, key).Result()
+	if err != nil {
+		return 0, err
+	}
+
+	ts.client.Expire(ctx, key, expireTime+time.Minute*2)
+
+	return tv, nil
 }
