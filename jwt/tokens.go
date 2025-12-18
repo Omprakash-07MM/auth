@@ -30,7 +30,7 @@ func (jm *JWTManager) GenerateAccessToken(ctx context.Context, userID string) (s
 
 	var tv int64
 	var err error
-	if jm.tokenStore != nil && jm.tokenStore.client != nil {
+	if jm.tokenStore != nil && jm.tokenStore.Client != nil {
 		tv, err = jm.tokenStore.StoreTokenVersion(ctx, AccessToken, userID, jm.accessExpiry)
 		if err != nil {
 			return "", time.Time{}, err
@@ -71,7 +71,7 @@ func (jm *JWTManager) GenerateRefreshToken(ctx context.Context, userID string) (
 
 	var tv int64
 	var err error
-	if jm.tokenStore != nil && jm.tokenStore.client != nil {
+	if jm.tokenStore != nil && jm.tokenStore.Client != nil {
 		tv, err = jm.tokenStore.StoreTokenVersion(ctx, RefreshToken, userID, jm.refreshExpiry)
 		if err != nil {
 			return "", time.Time{}, err
@@ -109,14 +109,14 @@ func (jm *JWTManager) GenerateRefreshToken(ctx context.Context, userID string) (
 // GenerateTokenPair generates both access and refresh tokens
 func (jm *JWTManager) GenerateTokenPair(ctx context.Context, userID string) (*TokenPair, error) {
 
-	if jm.tokenStore != nil && jm.tokenStore.client != nil {
-		accessKey := jm.tokenStore.accessPrefix + userID
-		refreshKey := jm.tokenStore.refreshPrefix + userID
-		refreshCount, _ := jm.tokenStore.client.Get(ctx, refreshKey).Int64()
+	if jm.tokenStore != nil && jm.tokenStore.Client != nil {
+		accessKey := jm.tokenStore.AccessPrefix + userID
+		refreshKey := jm.tokenStore.RefreshPrefix + userID
+		refreshCount, _ := jm.tokenStore.Client.Get(ctx, refreshKey).Int64()
 
 		if refreshCount > 500 {
-			jm.tokenStore.client.Del(ctx, accessKey)
-			jm.tokenStore.client.Del(ctx, refreshKey)
+			jm.tokenStore.Client.Del(ctx, accessKey)
+			jm.tokenStore.Client.Del(ctx, refreshKey)
 		}
 
 	}

@@ -28,9 +28,9 @@ type JWTManager struct {
 }
 
 type RedisTokenStore struct {
-	client        *redis.Client
-	accessPrefix  string
-	refreshPrefix string
+	Client        *redis.Client
+	AccessPrefix  string
+	RefreshPrefix string
 }
 
 // NewJWTManager creates a new JWT manager with RSA keys
@@ -53,12 +53,12 @@ func NewJWTIssuer(config *Config, store *RedisTokenStore) (*JWTManager, error) {
 		return nil, fmt.Errorf("key config cannot be nil")
 	}
 
-	if store != nil && store.client != nil {
-		if store.accessPrefix == "" {
-			store.accessPrefix = "AT:"
+	if store != nil && store.Client != nil {
+		if store.AccessPrefix == "" {
+			store.AccessPrefix = "AT:"
 		}
-		if store.refreshPrefix == "" {
-			store.refreshPrefix = "RT:"
+		if store.RefreshPrefix == "" {
+			store.RefreshPrefix = "RT:"
 		}
 	}
 
@@ -108,12 +108,12 @@ func NewJWTValidator(config *Config, store *RedisTokenStore) (*JWTManager, error
 		return nil, fmt.Errorf("key config cannot be nil")
 	}
 
-	if store != nil && store.client != nil {
-		if store.accessPrefix == "" {
-			store.accessPrefix = "AT:"
+	if store != nil && store.Client != nil {
+		if store.AccessPrefix == "" {
+			store.AccessPrefix = "AT:"
 		}
-		if store.refreshPrefix == "" {
-			store.refreshPrefix = "RT:"
+		if store.RefreshPrefix == "" {
+			store.RefreshPrefix = "RT:"
 		}
 	}
 
@@ -157,7 +157,7 @@ func (jm *JWTManager) ValidateToken(ctx context.Context, tokenString string, tok
 			return nil, ErrInvalidIssuer
 		}
 
-		if jm.tokenStore != nil && jm.tokenStore.client != nil {
+		if jm.tokenStore != nil && jm.tokenStore.Client != nil {
 			err := jm.tokenStore.ValidateTokenVersion(ctx, tokenType, claims)
 			if err != nil {
 				return nil, err
@@ -372,14 +372,14 @@ func (ts *RedisTokenStore) ValidateTokenVersion(ctx context.Context, tokenType T
 	prefix := ""
 	switch tokenType {
 	case AccessToken:
-		prefix = ts.accessPrefix
+		prefix = ts.AccessPrefix
 	case RefreshToken:
-		prefix = ts.refreshPrefix
+		prefix = ts.RefreshPrefix
 	}
 
 	key := prefix + claims.UserID
 
-	currentVer, err := ts.client.Get(ctx, key).Int64()
+	currentVer, err := ts.Client.Get(ctx, key).Int64()
 	if err != nil {
 		if err == redis.Nil {
 			return errors.New("invalid  token: no session found")
@@ -400,19 +400,19 @@ func (ts *RedisTokenStore) StoreTokenVersion(ctx context.Context, tokenType Toke
 	prefix := ""
 	switch tokenType {
 	case AccessToken:
-		prefix = ts.accessPrefix
+		prefix = ts.AccessPrefix
 	case RefreshToken:
-		prefix = ts.refreshPrefix
+		prefix = ts.RefreshPrefix
 	}
 
 	key := prefix + userId
 
-	tv, err := ts.client.Incr(ctx, key).Result()
+	tv, err := ts.Client.Incr(ctx, key).Result()
 	if err != nil {
 		return 0, err
 	}
 
-	ts.client.Expire(ctx, key, expireTime+time.Minute*2)
+	ts.Client.Expire(ctx, key, expireTime+time.Minute*2)
 
 	return tv, nil
 }
