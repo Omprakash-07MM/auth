@@ -27,16 +27,16 @@ type JWTManager struct {
 
 // NewJWTManager creates a new JWT manager with RSA keys
 
-func NewJWTManager(config *Config, redisCli *redis.Client) (*JWTManager, error) {
+func NewJWTManager(ctx context.Context, config *Config, redisCli *redis.Client) (*JWTManager, error) {
 	if config.Mode == ModeIssuer {
-		return NewJWTIssuer(config, redisCli)
+		return NewJWTIssuer(ctx, config, redisCli)
 	} else {
-		return NewJWTValidator(config, redisCli)
+		return NewJWTValidator(ctx, config, redisCli)
 	}
 }
 
 // NewJWTIssuer creates a JWT manager that can issue tokens (Auth Service)
-func NewJWTIssuer(config *Config, redisCli *redis.Client) (*JWTManager, error) {
+func NewJWTIssuer(ctx context.Context, config *Config, redisCli *redis.Client) (*JWTManager, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
@@ -76,10 +76,12 @@ func NewJWTIssuer(config *Config, redisCli *redis.Client) (*JWTManager, error) {
 		accessExpiry:  accessExpiry,
 		refreshExpiry: refreshExpiry,
 		issuer:        config.Issuer,
+		redisClient:   redisCli,
+		ctx:           ctx,
 	}, nil
 }
 
-func NewJWTValidator(config *Config, redisCli *redis.Client) (*JWTManager, error) {
+func NewJWTValidator(ctx context.Context, config *Config, redisCli *redis.Client) (*JWTManager, error) {
 	// For validator, we only need verifying key
 
 	if config == nil {
@@ -111,6 +113,7 @@ func NewJWTValidator(config *Config, redisCli *redis.Client) (*JWTManager, error
 		refreshExpiry: config.RefreshExpiry,
 		issuer:        config.Issuer,
 		redisClient:   redisCli,
+		ctx:           ctx,
 	}, nil
 }
 
