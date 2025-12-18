@@ -22,21 +22,20 @@ type JWTManager struct {
 	refreshExpiry time.Duration
 	issuer        string
 	redisClient   *redis.Client
-	ctx           context.Context
 }
 
 // NewJWTManager creates a new JWT manager with RSA keys
 
-func NewJWTManager(ctx context.Context, config *Config, redisCli *redis.Client) (*JWTManager, error) {
+func NewJWTManager(config *Config, redisCli *redis.Client) (*JWTManager, error) {
 	if config.Mode == ModeIssuer {
-		return NewJWTIssuer(ctx, config, redisCli)
+		return NewJWTIssuer(config, redisCli)
 	} else {
-		return NewJWTValidator(ctx, config, redisCli)
+		return NewJWTValidator(config, redisCli)
 	}
 }
 
 // NewJWTIssuer creates a JWT manager that can issue tokens (Auth Service)
-func NewJWTIssuer(ctx context.Context, config *Config, redisCli *redis.Client) (*JWTManager, error) {
+func NewJWTIssuer(config *Config, redisCli *redis.Client) (*JWTManager, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
@@ -77,11 +76,10 @@ func NewJWTIssuer(ctx context.Context, config *Config, redisCli *redis.Client) (
 		refreshExpiry: refreshExpiry,
 		issuer:        config.Issuer,
 		redisClient:   redisCli,
-		ctx:           ctx,
 	}, nil
 }
 
-func NewJWTValidator(ctx context.Context, config *Config, redisCli *redis.Client) (*JWTManager, error) {
+func NewJWTValidator(config *Config, redisCli *redis.Client) (*JWTManager, error) {
 	// For validator, we only need verifying key
 
 	if config == nil {
@@ -113,12 +111,11 @@ func NewJWTValidator(ctx context.Context, config *Config, redisCli *redis.Client
 		refreshExpiry: config.RefreshExpiry,
 		issuer:        config.Issuer,
 		redisClient:   redisCli,
-		ctx:           ctx,
 	}, nil
 }
 
 // ValidateToken validates and parses a JWT token
-func (jm *JWTManager) ValidateToken(tokenString string) (*CustomClaims, error) {
+func (jm *JWTManager) ValidateToken(ctx context.Context, tokenString string) (*CustomClaims, error) {
 	token, err := jm.ParseToken(tokenString)
 	if err != nil {
 		return nil, err
@@ -134,7 +131,7 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*CustomClaims, error) {
 		}
 		key := "tv" + claims.UserID
 
-		currentTV, err := jm.redisClient.Get(jm.ctx, key).Int64()
+		currentTV, err := jm.redisClient.Get(ctx, key).Int64()
 		if err != nil {
 			if err == redis.Nil {
 				return nil, errors.New("invalid token: no session found")

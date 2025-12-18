@@ -1,6 +1,7 @@
 package jwt
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -11,21 +12,21 @@ import (
 )
 
 type TokenIssuer interface {
-	GenerateAccessToken(userID string) (string, time.Time, error)
-	GenerateRefreshToken(userID string) (string, time.Time, error)
-	GenerateTokenPair(userID string) (*TokenPair, error)
-	RefreshToken(refreshToken string) (*TokenPair, error)
+	GenerateAccessToken(ctx context.Context, userID string) (string, time.Time, error)
+	GenerateRefreshToken(ctx context.Context, userID string) (string, time.Time, error)
+	GenerateTokenPair(ctx context.Context, userID string) (*TokenPair, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error)
 }
 
 // TokenManager handles token operations
 type TokenValidator interface {
-	ValidateToken(tokenString string) (*CustomClaims, error)
+	ValidateToken(ctx context.Context, tokenString string) (*CustomClaims, error)
 	ParseToken(tokenString string) (*jwt.Token, error)
 	GetTokenHash(token string) string
 }
 
 // GenerateAccessToken creates a new access token
-func (jm *JWTManager) GenerateAccessToken(userID string) (string, time.Time, error) {
+func (jm *JWTManager) GenerateAccessToken(ctx context.Context, userID string) (string, time.Time, error) {
 	expirationTime := time.Now().Add(jm.accessExpiry)
 
 	var tv int64 = 0
@@ -34,12 +35,12 @@ func (jm *JWTManager) GenerateAccessToken(userID string) (string, time.Time, err
 	if jm.redisClient != nil {
 		key := "tv:" + userID
 
-		tv, err = jm.redisClient.Incr(jm.ctx, key).Result()
+		tv, err = jm.redisClient.Incr(ctx, key).Result()
 		if err != nil {
 			return "", time.Time{}, err
 		}
 
-		jm.redisClient.Expire(jm.ctx, key, jm.accessExpiry+time.Minute*2)
+		jm.redisClient.Expire(ctx, key, jm.accessExpiry+time.Minute*2)
 	}
 
 	claims := &CustomClaims{
@@ -71,7 +72,7 @@ func (jm *JWTManager) GenerateAccessToken(userID string) (string, time.Time, err
 }
 
 // GenerateRefreshToken creates a new refresh
-func (jm *JWTManager) GenerateRefreshToken(userID string) (string, time.Time, error) {
+func (jm *JWTManager) GenerateRefreshToken(ctx context.Context, userID string) (string, time.Time, error) {
 	expirationTime := time.Now().Add(jm.refreshExpiry)
 
 	var rv int64 = 0
@@ -80,12 +81,12 @@ func (jm *JWTManager) GenerateRefreshToken(userID string) (string, time.Time, er
 	if jm.redisClient != nil {
 		key := "rv:" + userID
 
-		rv, err = jm.redisClient.Incr(jm.ctx, key).Result()
+		rv, err = jm.redisClient.Incr(ctx, key).Result()
 		if err != nil {
 			return "", time.Time{}, err
 		}
 
-		jm.redisClient.Expire(jm.ctx, key, jm.refreshExpiry+time.Minute*2)
+		jm.redisClient.Expire(ctx, key, jm.refreshExpiry+time.Minute*2)
 	}
 
 	claims := &CustomClaims{
@@ -117,26 +118,26 @@ func (jm *JWTManager) GenerateRefreshToken(userID string) (string, time.Time, er
 }
 
 // GenerateTokenPair generates both access and refresh tokens
-func (jm *JWTManager) GenerateTokenPair(userID string) (*TokenPair, error) {
+func (jm *JWTManager) GenerateTokenPair(ctx context.Context, userID string) (*TokenPair, error) {
 
 	if jm.redisClient != nil {
 		accessKey := "tv:" + userID
 		refreshKey := "rv:" + userID
-		refreshCount, _ := jm.redisClient.Get(jm.ctx, refreshKey).Int64()
+		refreshCount, _ := jm.redisClient.Get(ctx, refreshKey).Int64()
 
 		if refreshCount > 500 {
-			jm.redisClient.Del(jm.ctx, accessKey)
-			jm.redisClient.Del(jm.ctx, refreshKey)
+			jm.redisClient.Del(ctx, accessKey)
+			jm.redisClient.Del(ctx, refreshKey)
 		}
 
 	}
 
-	accessToken, accessExpiry, err := jm.GenerateAccessToken(userID)
+	accessToken, accessExpiry, err := jm.GenerateAccessToken(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	refreshToken, _, err := jm.GenerateRefreshToken(userID)
+	refreshToken, _, err := jm.GenerateRefreshToken(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -155,9 +156,9 @@ func (jm *JWTManager) GetTokenHash(token string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func (j *JWTManager) RefreshToken(refreshToken string) (*TokenPair, error) {
+func (j *JWTManager) RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error) {
 	// Parse and validate the refresh token
-	claims, err := j.ValidateToken(refreshToken)
+	claims, err := j.ValidateToken(ctx, refreshToken)
 	if err != nil {
 		return nil, err
 	}
@@ -168,5 +169,5 @@ func (j *JWTManager) RefreshToken(refreshToken string) (*TokenPair, error) {
 	}
 
 	// Generate new token pair
-	return j.GenerateTokenPair(claims.UserID)
+	return j.GenerateTokenPair(ctx, claims.UserID)
 }
