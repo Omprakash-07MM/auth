@@ -1,7 +1,6 @@
 package jwt
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -11,31 +10,22 @@ import (
 )
 
 type TokenIssuer interface {
-	GenerateAccessToken(ctx context.Context, userID string) (string, time.Time, error)
-	GenerateRefreshToken(ctx context.Context, userID string) (string, time.Time, error)
-	GenerateTokenPair(ctx context.Context, userID string) (*TokenPair, error)
-	RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error)
+	GenerateAccessToken(userID string) (string, time.Time, error)
+	GenerateRefreshToken(userID string) (string, time.Time, error)
+	GenerateTokenPair(userID string) (*TokenPair, error)
+	RefreshToken(refreshToken string) (*TokenPair, error)
 }
 
 // TokenManager handles token operations
 type TokenValidator interface {
-	ValidateToken(ctx context.Context, tokenString string) (*CustomClaims, error)
+	ValidateToken(tokenString string) (*CustomClaims, error)
 	ParseToken(tokenString string) (*jwt.Token, error)
 	GetTokenHash(token string) string
 }
 
 // GenerateAccessToken creates a new access token
-func (jm *JWTManager) GenerateAccessToken(ctx context.Context, userID string) (string, time.Time, error) {
+func (jm *JWTManager) GenerateAccessToken(userID string) (string, time.Time, error) {
 	expirationTime := time.Now().Add(jm.accessExpiry)
-
-	var tv int64
-	var err error
-	if jm.tokenStore != nil && jm.tokenStore.Client != nil {
-		tv, err = jm.tokenStore.StoreTokenVersion(ctx, AccessToken, userID, jm.accessExpiry)
-		if err != nil {
-			return "", time.Time{}, err
-		}
-	}
 
 	claims := &CustomClaims{
 		UserID:    userID,
@@ -46,10 +36,6 @@ func (jm *JWTManager) GenerateAccessToken(ctx context.Context, userID string) (s
 			Issuer:    jm.issuer,
 			Subject:   userID,
 		},
-	}
-
-	if tv > 0 {
-		claims.TokenVersion = tv
 	}
 
 	if err := claims.Validate(); err != nil {
@@ -66,17 +52,10 @@ func (jm *JWTManager) GenerateAccessToken(ctx context.Context, userID string) (s
 }
 
 // GenerateRefreshToken creates a new refresh
-func (jm *JWTManager) GenerateRefreshToken(ctx context.Context, userID string) (string, time.Time, error) {
+func (jm *JWTManager) GenerateRefreshToken(userID string) (string, time.Time, error) {
 	expirationTime := time.Now().Add(jm.refreshExpiry)
 
-	var tv int64
 	var err error
-	if jm.tokenStore != nil && jm.tokenStore.Client != nil {
-		tv, err = jm.tokenStore.StoreTokenVersion(ctx, RefreshToken, userID, jm.refreshExpiry)
-		if err != nil {
-			return "", time.Time{}, err
-		}
-	}
 
 	claims := &CustomClaims{
 		UserID:    userID,
@@ -87,10 +66,6 @@ func (jm *JWTManager) GenerateRefreshToken(ctx context.Context, userID string) (
 			Issuer:    jm.issuer,
 			Subject:   userID,
 		},
-	}
-
-	if tv > 0 {
-		claims.TokenVersion = tv
 	}
 
 	if err := claims.Validate(); err != nil {
@@ -107,26 +82,14 @@ func (jm *JWTManager) GenerateRefreshToken(ctx context.Context, userID string) (
 }
 
 // GenerateTokenPair generates both access and refresh tokens
-func (jm *JWTManager) GenerateTokenPair(ctx context.Context, userID string) (*TokenPair, error) {
+func (jm *JWTManager) GenerateTokenPair(userID string) (*TokenPair, error) {
 
-	if jm.tokenStore != nil && jm.tokenStore.Client != nil {
-		accessKey := jm.tokenStore.AccessPrefix + userID
-		refreshKey := jm.tokenStore.RefreshPrefix + userID
-		refreshCount, _ := jm.tokenStore.Client.Get(ctx, refreshKey).Int64()
-
-		if refreshCount > 500 {
-			jm.tokenStore.Client.Del(ctx, accessKey)
-			jm.tokenStore.Client.Del(ctx, refreshKey)
-		}
-
-	}
-
-	accessToken, accessExpiry, err := jm.GenerateAccessToken(ctx, userID)
+	accessToken, accessExpiry, err := jm.GenerateAccessToken(userID)
 	if err != nil {
 		return nil, err
 	}
 
-	refreshToken, _, err := jm.GenerateRefreshToken(ctx, userID)
+	refreshToken, _, err := jm.GenerateRefreshToken(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -145,12 +108,12 @@ func (jm *JWTManager) GetTokenHash(token string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func (jm *JWTManager) RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error) {
+func (jm *JWTManager) RefreshToken(refreshToken string) (*TokenPair, error) {
 	// Parse and validate the refresh token
-	claims, err := jm.ValidateToken(ctx, refreshToken, RefreshToken)
+	claims, err := jm.ValidateToken(refreshToken, RefreshToken)
 	if err != nil {
 		return nil, err
 	}
 	// Generate new token pair
-	return jm.GenerateTokenPair(ctx, claims.UserID)
+	return jm.GenerateTokenPair(claims.UserID)
 }

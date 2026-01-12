@@ -1,15 +1,12 @@
 package jwt
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/redis/go-redis/v9"
 )
 
 // JWTManager manages JWT operations
@@ -24,48 +21,32 @@ type JWTManager struct {
 
 	//if tokenStore is nil, token versioning is disabled
 	//only used for the maintenance of token versions for revocation
-	tokenStore *RedisTokenStore
-}
-
-type RedisTokenStore struct {
-	Client        *redis.Client
-	AccessPrefix  string
-	RefreshPrefix string
 }
 
 // NewJWTManager creates a new JWT manager with RSA keys
 
-func NewJWTManager(config *Config, store *RedisTokenStore) (*JWTManager, error) {
+func NewJWTManager(config *Config) (*JWTManager, error) {
 
 	switch config.Mode {
 	case ModeIssuer:
-		return NewJWTIssuer(config, store)
+		return NewJWTIssuer(config)
 	case ModeValidator:
-		return NewJWTValidator(config, store)
+		return NewJWTValidator(config)
 	case ModeBoth:
-		return NewFullJWTManager(config, store)
+		return NewFullJWTManager(config)
 	default:
 		return nil, fmt.Errorf("invalid security mode: %s", config.Mode)
 	}
 }
 
 // NewJWTIssuer creates a JWT manager that can issue tokens (Auth Service)
-func NewJWTIssuer(config *Config, store *RedisTokenStore) (*JWTManager, error) {
+func NewJWTIssuer(config *Config) (*JWTManager, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
 
 	if config.KeyConfig == nil {
 		return nil, fmt.Errorf("key config cannot be nil")
-	}
-
-	if store != nil && store.Client != nil {
-		if store.AccessPrefix == "" {
-			store.AccessPrefix = "AT:"
-		}
-		if store.RefreshPrefix == "" {
-			store.RefreshPrefix = "RT:"
-		}
 	}
 
 	// Get signing method from algorithm
@@ -99,11 +80,10 @@ func NewJWTIssuer(config *Config, store *RedisTokenStore) (*JWTManager, error) {
 		accessExpiry:  accessExpiry,
 		refreshExpiry: refreshExpiry,
 		issuer:        config.Issuer,
-		tokenStore:    store,
 	}, nil
 }
 
-func NewJWTValidator(config *Config, store *RedisTokenStore) (*JWTManager, error) {
+func NewJWTValidator(config *Config) (*JWTManager, error) {
 	// For validator, we only need verifying key
 
 	if config == nil {
@@ -112,15 +92,6 @@ func NewJWTValidator(config *Config, store *RedisTokenStore) (*JWTManager, error
 
 	if config.KeyConfig == nil {
 		return nil, fmt.Errorf("key config cannot be nil")
-	}
-
-	if store != nil && store.Client != nil {
-		if store.AccessPrefix == "" {
-			store.AccessPrefix = "AT:"
-		}
-		if store.RefreshPrefix == "" {
-			store.RefreshPrefix = "RT:"
-		}
 	}
 
 	// Get signing method from algorithm
@@ -143,11 +114,10 @@ func NewJWTValidator(config *Config, store *RedisTokenStore) (*JWTManager, error
 		accessExpiry:  config.AccessExpiry,
 		refreshExpiry: config.RefreshExpiry,
 		issuer:        config.Issuer,
-		tokenStore:    store,
 	}, nil
 }
 
-func NewFullJWTManager(config *Config, store *RedisTokenStore) (*JWTManager, error) {
+func NewFullJWTManager(config *Config) (*JWTManager, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
@@ -187,12 +157,11 @@ func NewFullJWTManager(config *Config, store *RedisTokenStore) (*JWTManager, err
 		accessExpiry:  accessExpiry,
 		refreshExpiry: refreshExpiry,
 		issuer:        config.Issuer,
-		tokenStore:    store,
 	}, nil
 }
 
 // ValidateToken validates and parses a JWT token
-func (jm *JWTManager) ValidateToken(ctx context.Context, tokenString string, tokenType TokenType) (*CustomClaims, error) {
+func (jm *JWTManager) ValidateToken(tokenString string, tokenType TokenType) (*CustomClaims, error) {
 	token, err := jm.ParseToken(tokenString)
 	if err != nil {
 		return nil, err
@@ -205,13 +174,6 @@ func (jm *JWTManager) ValidateToken(ctx context.Context, tokenString string, tok
 
 		if claims.Issuer != jm.issuer {
 			return nil, ErrInvalidIssuer
-		}
-
-		if jm.tokenStore != nil && jm.tokenStore.Client != nil {
-			err := jm.tokenStore.ValidateTokenVersion(ctx, tokenType, claims)
-			if err != nil {
-				return nil, err
-			}
 		}
 
 		if claims.TokenType != tokenType {
@@ -415,54 +377,4 @@ func loadAsymmetricKey(source KeySource, path string, data []byte, isPrivate boo
 	default:
 		return nil, fmt.Errorf("unsupported signing method: %v", m.Alg())
 	}
-}
-
-func (ts *RedisTokenStore) ValidateTokenVersion(ctx context.Context, tokenType TokenType, claims *CustomClaims) error {
-
-	prefix := ""
-	switch tokenType {
-	case AccessToken:
-		prefix = ts.AccessPrefix
-	case RefreshToken:
-		prefix = ts.RefreshPrefix
-	}
-
-	key := prefix + claims.UserID
-
-	currentVer, err := ts.Client.Get(ctx, key).Int64()
-	if err != nil {
-		if err == redis.Nil {
-			return errors.New("invalid  token: no session found")
-		}
-
-		return err
-	}
-
-	if claims.TokenVersion != currentVer {
-		return errors.New("invalid  token: token revoked")
-	}
-
-	return nil
-}
-
-func (ts *RedisTokenStore) StoreTokenVersion(ctx context.Context, tokenType TokenType, userId string, expireTime time.Duration) (int64, error) {
-
-	prefix := ""
-	switch tokenType {
-	case AccessToken:
-		prefix = ts.AccessPrefix
-	case RefreshToken:
-		prefix = ts.RefreshPrefix
-	}
-
-	key := prefix + userId
-
-	tv, err := ts.Client.Incr(ctx, key).Result()
-	if err != nil {
-		return 0, err
-	}
-
-	ts.Client.Expire(ctx, key, expireTime+time.Minute*2)
-
-	return tv, nil
 }
