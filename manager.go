@@ -35,7 +35,7 @@ func NewJWTManager(config *Config) (*JWTManager, error) {
 	case ModeBoth:
 		return NewFullJWTManager(config)
 	default:
-		return nil, fmt.Errorf("invalid security mode: %s", config.Mode)
+		return nil, fmt.Errorf("invalid security mode: %v", config.Mode)
 	}
 }
 
