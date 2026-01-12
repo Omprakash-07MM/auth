@@ -1,4 +1,4 @@
-module github.com/Omprakash-07MM/auth
+module github.com/Omprakash-07MM/jwt
 
 go 1.23.0
 
