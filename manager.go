@@ -378,3 +378,11 @@ func loadAsymmetricKey(source KeySource, path string, data []byte, isPrivate boo
 		return nil, fmt.Errorf("unsupported signing method: %v", m.Alg())
 	}
 }
+
+func (jm *JWTManager) SetAccessExpiry(d time.Duration) {
+	jm.accessExpiry = d
+}
+
+func (jm *JWTManager) SetRefreshExpiry(d time.Duration) {
+	jm.refreshExpiry = d
+}
