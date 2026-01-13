@@ -83,3 +83,22 @@ type Config struct {
 
 	Algorithm string
 }
+
+type options struct {
+	tokenVersion *int64
+	issuer       string
+}
+
+type Options func(*options)
+
+func WithTokenVersion(v int64) Options {
+	return func(o *options) {
+		o.tokenVersion = &v
+	}
+}
+
+func WithIssuer(iss string) Options {
+	return func(o *options) {
+		o.issuer = iss
+	}
+}

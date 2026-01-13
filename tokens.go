@@ -24,8 +24,13 @@ type TokenValidator interface {
 }
 
 // GenerateAccessToken creates a new access token
-func (jm *JWTManager) GenerateAccessToken(userID string) (string, time.Time, error) {
+func (jm *JWTManager) GenerateAccessToken(userID string, opts ...Options) (string, time.Time, error) {
 	expirationTime := time.Now().Add(jm.accessExpiry)
+
+	options := &options{}
+	for _, opt := range opts {
+		opt(options)
+	}
 
 	claims := &CustomClaims{
 		UserID:    userID,
@@ -36,6 +41,10 @@ func (jm *JWTManager) GenerateAccessToken(userID string) (string, time.Time, err
 			Issuer:    jm.issuer,
 			Subject:   userID,
 		},
+	}
+
+	if options.tokenVersion != nil {
+		claims.TokenVersion = *options.tokenVersion
 	}
 
 	if err := claims.Validate(); err != nil {
@@ -52,11 +61,15 @@ func (jm *JWTManager) GenerateAccessToken(userID string) (string, time.Time, err
 }
 
 // GenerateRefreshToken creates a new refresh
-func (jm *JWTManager) GenerateRefreshToken(userID string) (string, time.Time, error) {
+func (jm *JWTManager) GenerateRefreshToken(userID string, opts ...Options) (string, time.Time, error) {
 	expirationTime := time.Now().Add(jm.refreshExpiry)
 
-	var err error
+	options := &options{}
+	for _, opt := range opts {
+		opt(options)
+	}
 
+	var err error
 	claims := &CustomClaims{
 		UserID:    userID,
 		TokenType: RefreshToken,
@@ -66,6 +79,10 @@ func (jm *JWTManager) GenerateRefreshToken(userID string) (string, time.Time, er
 			Issuer:    jm.issuer,
 			Subject:   userID,
 		},
+	}
+
+	if options.tokenVersion != nil {
+		claims.TokenVersion = *options.tokenVersion
 	}
 
 	if err := claims.Validate(); err != nil {
@@ -82,9 +99,9 @@ func (jm *JWTManager) GenerateRefreshToken(userID string) (string, time.Time, er
 }
 
 // GenerateTokenPair generates both access and refresh tokens
-func (jm *JWTManager) GenerateTokenPair(userID string) (*TokenPair, error) {
+func (jm *JWTManager) GenerateTokenPair(userID string, opts ...Options) (*TokenPair, error) {
 
-	accessToken, accessExpiry, err := jm.GenerateAccessToken(userID)
+	accessToken, accessExpiry, err := jm.GenerateAccessToken(userID, opts...)
 	if err != nil {
 		return nil, err
 	}
