@@ -125,12 +125,12 @@ func (jm *JWTManager) GetTokenHash(token string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func (jm *JWTManager) RefreshToken(refreshToken string) (*TokenPair, error) {
+func (jm *JWTManager) RefreshToken(refreshToken string, opts ...Options) (*TokenPair, error) {
 	// Parse and validate the refresh token
 	claims, err := jm.ValidateToken(refreshToken, RefreshToken)
 	if err != nil {
 		return nil, err
 	}
 	// Generate new token pair
-	return jm.GenerateTokenPair(claims.UserID)
+	return jm.GenerateTokenPair(claims.UserID, opts...)
 }
