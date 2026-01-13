@@ -85,15 +85,17 @@ type Config struct {
 }
 
 type options struct {
-	tokenVersion *int64
-	issuer       string
+	AccessTokenVersion  *int64
+	RefreshTokenVersion *int64
+	issuer              string
 }
 
 type Options func(*options)
 
-func WithTokenVersion(v int64) Options {
+func WithTokenVersions(av int64, rv int64) Options {
 	return func(o *options) {
-		o.tokenVersion = &v
+		o.AccessTokenVersion = &av
+		o.RefreshTokenVersion = &rv
 	}
 }
 

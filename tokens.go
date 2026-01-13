@@ -43,8 +43,8 @@ func (jm *JWTManager) GenerateAccessToken(userID string, opts ...Options) (strin
 		},
 	}
 
-	if options.tokenVersion != nil {
-		claims.TokenVersion = *options.tokenVersion
+	if options.AccessTokenVersion != nil {
+		claims.TokenVersion = *options.AccessTokenVersion
 	}
 
 	if err := claims.Validate(); err != nil {
@@ -81,8 +81,8 @@ func (jm *JWTManager) GenerateRefreshToken(userID string, opts ...Options) (stri
 		},
 	}
 
-	if options.tokenVersion != nil {
-		claims.TokenVersion = *options.tokenVersion
+	if options.RefreshTokenVersion != nil {
+		claims.TokenVersion = *options.RefreshTokenVersion
 	}
 
 	if err := claims.Validate(); err != nil {
