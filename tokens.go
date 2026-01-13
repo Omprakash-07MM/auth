@@ -43,8 +43,8 @@ func (jm *JWTManager) GenerateAccessToken(userID string, opts ...Options) (strin
 		},
 	}
 
-	if options.AccessTokenVersion != nil {
-		claims.TokenVersion = *options.AccessTokenVersion
+	if options.tokenVersion != nil {
+		claims.TokenVersion = *options.tokenVersion
 	}
 
 	if err := claims.Validate(); err != nil {
@@ -61,15 +61,11 @@ func (jm *JWTManager) GenerateAccessToken(userID string, opts ...Options) (strin
 }
 
 // GenerateRefreshToken creates a new refresh
-func (jm *JWTManager) GenerateRefreshToken(userID string, opts ...Options) (string, time.Time, error) {
+func (jm *JWTManager) GenerateRefreshToken(userID string) (string, time.Time, error) {
 	expirationTime := time.Now().Add(jm.refreshExpiry)
 
-	options := &options{}
-	for _, opt := range opts {
-		opt(options)
-	}
-
 	var err error
+
 	claims := &CustomClaims{
 		UserID:    userID,
 		TokenType: RefreshToken,
@@ -79,10 +75,6 @@ func (jm *JWTManager) GenerateRefreshToken(userID string, opts ...Options) (stri
 			Issuer:    jm.issuer,
 			Subject:   userID,
 		},
-	}
-
-	if options.RefreshTokenVersion != nil {
-		claims.TokenVersion = *options.RefreshTokenVersion
 	}
 
 	if err := claims.Validate(); err != nil {
@@ -99,9 +91,9 @@ func (jm *JWTManager) GenerateRefreshToken(userID string, opts ...Options) (stri
 }
 
 // GenerateTokenPair generates both access and refresh tokens
-func (jm *JWTManager) GenerateTokenPair(userID string, opts ...Options) (*TokenPair, error) {
+func (jm *JWTManager) GenerateTokenPair(userID string) (*TokenPair, error) {
 
-	accessToken, accessExpiry, err := jm.GenerateAccessToken(userID, opts...)
+	accessToken, accessExpiry, err := jm.GenerateAccessToken(userID)
 	if err != nil {
 		return nil, err
 	}
@@ -125,12 +117,12 @@ func (jm *JWTManager) GetTokenHash(token string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func (jm *JWTManager) RefreshToken(refreshToken string, opts ...Options) (*TokenPair, error) {
+func (jm *JWTManager) RefreshToken(refreshToken string) (*TokenPair, error) {
 	// Parse and validate the refresh token
 	claims, err := jm.ValidateToken(refreshToken, RefreshToken)
 	if err != nil {
 		return nil, err
 	}
 	// Generate new token pair
-	return jm.GenerateTokenPair(claims.UserID, opts...)
+	return jm.GenerateTokenPair(claims.UserID)
 }
