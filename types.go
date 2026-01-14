@@ -6,10 +6,11 @@ import (
 
 // TokenPair represents access and refresh tokens
 type TokenPair struct {
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
-	AccessExpiry time.Time `json:"access_expiry"`
-	TokenType    string    `json:"token_type"`
+	AccessToken   string    `json:"access_token"`
+	RefreshToken  string    `json:"refresh_token"`
+	AccessExpiry  time.Time `json:"access_expiry"`
+	RefreshExpiry time.Time `json:"refresh_expiry"`
+	TokenType     string    `json:"token_type"`
 }
 
 // TokenType represents different token types

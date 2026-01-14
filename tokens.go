@@ -106,16 +106,17 @@ func (jm *JWTManager) GenerateTokenPair(userID string, opts ...Options) (*TokenP
 		return nil, err
 	}
 
-	refreshToken, _, err := jm.GenerateRefreshToken(userID, opts...)
+	refreshToken, refresh_expiry, err := jm.GenerateRefreshToken(userID, opts...)
 	if err != nil {
 		return nil, err
 	}
 
 	return &TokenPair{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		AccessExpiry: accessExpiry,
-		TokenType:    "Bearer",
+		AccessToken:   accessToken,
+		RefreshToken:  refreshToken,
+		AccessExpiry:  accessExpiry,
+		RefreshExpiry: refresh_expiry,
+		TokenType:     "Bearer",
 	}, nil
 }
 
