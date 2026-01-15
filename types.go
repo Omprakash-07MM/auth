@@ -26,7 +26,6 @@ type SecurityMode int
 const (
 	ModeIssuer    SecurityMode = 0
 	ModeValidator SecurityMode = 1
-	ModeBoth      SecurityMode = 2
 )
 
 // SigningMethod defines the supported signing algorithms

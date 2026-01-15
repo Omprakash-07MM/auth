@@ -32,8 +32,6 @@ func NewJWTManager(config *Config) (*JWTManager, error) {
 		return NewJWTIssuer(config)
 	case ModeValidator:
 		return NewJWTValidator(config)
-	case ModeBoth:
-		return NewFullJWTManager(config)
 	default:
 		return nil, fmt.Errorf("invalid security mode: %v", config.Mode)
 	}
@@ -113,49 +111,6 @@ func NewJWTValidator(config *Config) (*JWTManager, error) {
 		signingMethod: signingMethod,
 		accessExpiry:  config.AccessExpiry,
 		refreshExpiry: config.RefreshExpiry,
-		issuer:        config.Issuer,
-	}, nil
-}
-
-func NewFullJWTManager(config *Config) (*JWTManager, error) {
-	if config == nil {
-		return nil, fmt.Errorf("config cannot be nil")
-	}
-
-	if config.KeyConfig == nil {
-		return nil, fmt.Errorf("key config cannot be nil")
-	}
-
-	// Get signing method from algorithm
-	signingMethod, err := getSigningMethod(config)
-	if err != nil {
-		return nil, err
-	}
-
-	// Resolve keys based on algorithm type
-	signingKey, verifyingKey, err := resolveKeys(config.KeyConfig, signingMethod, true)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve keys: %w", err)
-	}
-
-	// Set default expiry if not provided
-	accessExpiry := config.AccessExpiry
-	if accessExpiry == 0 {
-		accessExpiry = 15 * time.Minute
-	}
-
-	refreshExpiry := config.RefreshExpiry
-	if refreshExpiry == 0 {
-		refreshExpiry = 7 * 24 * time.Hour
-	}
-
-	return &JWTManager{
-		mode:          ModeBoth,
-		signingKey:    signingKey,
-		verifyingKey:  verifyingKey,
-		signingMethod: signingMethod,
-		accessExpiry:  accessExpiry,
-		refreshExpiry: refreshExpiry,
 		issuer:        config.Issuer,
 	}, nil
 }
