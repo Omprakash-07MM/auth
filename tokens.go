@@ -33,18 +33,12 @@ func (jm *JWTManager) GenerateAccessToken(userID string, opts ...Options) (strin
 	}
 
 	claims := &CustomClaims{
-		UserID:    userID,
 		TokenType: AccessToken,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    jm.issuer,
-			Subject:   userID,
 		},
-	}
-
-	if options.tokenVersion != nil {
-		claims.TokenVersion = *options.tokenVersion
 	}
 
 	if err := claims.Validate(); err != nil {
