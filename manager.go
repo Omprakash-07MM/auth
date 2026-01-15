@@ -133,7 +133,7 @@ func NewFullJWTManager(config *Config) (*JWTManager, error) {
 	}
 
 	// Resolve keys based on algorithm type
-	signingKey, verifyingKey, err := resolveKeys(config.KeyConfig, signingMethod, config.Mode == ModeIssuer)
+	signingKey, verifyingKey, err := resolveKeys(config.KeyConfig, signingMethod, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve keys: %w", err)
 	}
